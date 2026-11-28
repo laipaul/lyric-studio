@@ -979,6 +979,11 @@ requests are added at the end and acknowledged with their place.
 1f. ✅ **Done 28 Nov 2026: the music-video matcher said 0% on an exact excerpt** (Paul's "Wedding DayTake5 Ending.mp4", made
    on WaveSpeed from WeddingDayAudioTrim5 = master 3:33.90-3:51.64 exact: measured sample correlation 1.000 at offset 0,
    same polarity; the app says "its sound is not this song (it matches 0%)"). Blocks the ending.
+1h. ✅ **Done 28 Nov 2026: after "Find its shots again", the new shot showed "Synced on its lines" while the old pieces
+   were still there** (cause: a second "Find its shots again" compared the video with itself and made the old shot-1
+   take current again; now a take counts only if its own piece matches the new shot, and wrongly current old takes are
+   corrected when the panel loads) (WeddingDaySingingClip1: 1 shot, lines 15-16, but song.json still has line 15 "…shot 1.mp4" and line
+   16 "…shot 2.mp4" from the earlier split; no "Use on its lines" button; "Use every singing shot" greyed).
 1g. **NEXT: design rethink session** (Paul, 28 Nov 2026: "we need to simplify this assembly line workflow, there has
    been too many little addons that confuses me"; "the app must identify each asset clearly and be able to assemble
    them in the right place according to the storyboard"). First an inventory of every button and panel, each marked

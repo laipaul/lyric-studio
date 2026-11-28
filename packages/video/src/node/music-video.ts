@@ -65,7 +65,7 @@ export async function analyseMusicVideo(ws: Workspace, projectId: string, file: 
   update(dir, name, (p) => {
     // "Find its shots again" (28 Nov 2026): only the shots change. A take whose shots are no longer the same stretch of the video
     // (the older, finer split) stays exactly as it is, on its lines, but no longer counts as a shot of the new split (mvStale).
-    markStaleTakes(p.takes, p.mv?.shots ?? [], shots);
+    markStaleTakes(p.takes, p.mv?.shots ?? [], shots, rec.offsetMs);
     p.mv = rec;
     if (!p.source) p.source = "WaveSpeed music video";
   });
@@ -73,26 +73,50 @@ export async function analyseMusicVideo(ws: Workspace, projectId: string, file: 
 }
 
 const SAME_EDGE_MS = 60;
-// A take of shots a..b (old split) is still current when the new split has the same shots a..b with the same outer edges
-// and the same number of shots between; otherwise it is "from an earlier split".
-export function markStaleTakes(takes: Take[], oldShots: readonly { fromMs: number; toMs: number }[], newShots: readonly { fromMs: number; toMs: number }[]): void {
+const PIECE_EDGE_MS = 600; // a cut piece starts / ends a little inside its shot (EDGE_TRIM_MS) or runs a little past the last sung word
+// A take of shots a..b is still current only when the new split has shots a..b and the take's own piece of the video lies on their
+// outer edges (a singing take knows its own piece: sync_ms / to_ms are song time, so minus the video's offset). A take without
+// that (a story clip) is compared old split vs new split, and is never made current again once it was marked: a second
+// "Find its shots again" gives the same split twice, which says nothing about a take cut from an earlier one (28 Nov 2026, Paul).
+export function markStaleTakes(takes: Take[], oldShots: readonly { fromMs: number; toMs: number }[], newShots: readonly { fromMs: number; toMs: number }[], offsetMs?: number): void {
   for (const t of takes) {
     if (t.mvShot === undefined) continue;
     const a = t.mvShot;
     const b = t.mvShotTo ?? a;
-    const o1 = oldShots[a];
-    const o2 = oldShots[b];
     const n1 = newShots[a];
     const n2 = newShots[b];
+    if (offsetMs !== undefined && t.sync_ms !== undefined && t.to_ms !== undefined) {
+      const same = !!(n1 && n2) && Math.abs(t.sync_ms - offsetMs - n1.fromMs) <= PIECE_EDGE_MS && Math.abs(t.to_ms - offsetMs - n2.toMs) <= PIECE_EDGE_MS;
+      if (same) delete t.mvStale;
+      else t.mvStale = true;
+      continue;
+    }
+    if (t.mvStale) continue;
+    const o1 = oldShots[a];
+    const o2 = oldShots[b];
     const same = !!(o1 && o2 && n1 && n2) && Math.abs(o1.fromMs - n1.fromMs) <= SAME_EDGE_MS && Math.abs(o2.toMs - n2.toMs) <= SAME_EDGE_MS;
-    if (same) delete t.mvStale;
-    else if (oldShots.length) t.mvStale = true;
+    if (!same && oldShots.length) t.mvStale = true;
+  }
+}
+
+// A singing take whose own piece is not on the edges of its shot in the video's current split is "from an earlier split", whatever
+// an earlier check left on it (a second "Find its shots again" once made such a take current again). Only marks; nothing is moved.
+export function settleStaleTakes(dir: string): void {
+  const all = readPictures(dir).pictures;
+  for (const [name, rec] of Object.entries(all)) {
+    const mv = rec.mv;
+    if (!mv?.matched || !mv.shots.length) continue;
+    const before = rec.takes.map((t) => !!t.mvStale);
+    const copy = rec.takes.map((t) => ({ ...t }));
+    markStaleTakes(copy, [], mv.shots, mv.offsetMs);
+    if (copy.some((t, k) => !!t.mvStale !== before[k])) update(dir, name, (p) => markStaleTakes(p.takes, [], mv.shots, mv.offsetMs));
   }
 }
 
 // The video's shots with their lines and takes, for Creation.
 export async function withMusicVideos(ws: Workspace, projectId: string, view: PicturesView): Promise<PicturesView> {
   const { dir } = songFolder(ws, projectId);
+  settleStaleTakes(dir);
   const all = readPictures(dir).pictures;
   if (!view.pictures.some((p) => all[p.file]?.mv)) return view;
   const lines = (await singerContext(ws, projectId).catch(() => null))?.lines ?? [];
@@ -138,6 +162,7 @@ function mvView(ws: Workspace, projectId: string, mv: MusicVideoRecord, takes: r
 export async function useMusicVideoShot(ws: Workspace, projectId: string, file: unknown, shot: unknown, o: { hand?: boolean } = {}): Promise<{ n: number; placed: "lines" | "storyboard"; first: number | null; last: number | null; clip: string }> {
   const { dir } = songFolder(ws, projectId);
   const name = path.basename(String(file ?? ""));
+  settleStaleTakes(dir);
   let take = await cutShotTake(ws, projectId, name, shot);
   if (take.kind === "lipsync") {
     // Shots of the same video that follow each other on consecutive lines play as ONE piece (the generator's own crossfade kept):
@@ -259,6 +284,7 @@ export function mvRefPicture(dir: string, file: string): string | null {
 export async function useAllMusicVideoShots(ws: Workspace, projectId: string, file: unknown): Promise<{ used: number[] }> {
   const { dir } = songFolder(ws, projectId);
   const name = path.basename(String(file ?? ""));
+  settleStaleTakes(dir);
   const mv = readPictures(dir).pictures[name]?.mv;
   if (!mv?.matched) throw new Error("Check it first: This is a music video of this song.");
   const lines = (await singerContext(ws, projectId)).lines ?? [];
@@ -504,6 +530,7 @@ export async function runMusicVideo(openWs: () => Workspace, projectId: string, 
 // (WaveSpeed Video Upscaler Pro); the final takes its place on its lines, in time. Cost first, under the cap.
 export function startMusicVideoFinals(ws: Workspace, projectId: string, file: unknown, cap: unknown, startFinal: (n: number) => Take, usdOf: (seconds: number) => number): { takes: Take[]; usd: number } {
   const { dir } = songFolder(ws, projectId);
+  settleStaleTakes(dir);
   const name = path.basename(String(file ?? ""));
   const takes = readPictures(dir).pictures[name]?.takes ?? [];
   const todo = takes.filter((t) => t.mvShot !== undefined && !t.mvStale && t.kind === "lipsync" && t.status === "done" && t.finalOf === undefined && singingTakeInUse(ws, projectId, t) && !takes.some((x) => x.finalOf === t.n && x.status !== "failed"));

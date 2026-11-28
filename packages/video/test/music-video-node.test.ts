@@ -240,6 +240,15 @@ describe("Find its shots again (28 Nov 2026)", () => {
     expect(rec.takes.map(({ mvStale: _s, ...t }) => t)).toEqual(takesBefore.map(({ mvStale: _s, ...t }) => t));
     expect(rec.takes.filter((t) => t.mvShot !== undefined).every((t) => t.mvStale)).toBe(true);
     expect(anchorsOf()).toEqual(before);
+    // Paul, 28 Nov 2026: a SECOND "Find its shots again" (same split twice) must not make the old take of shot index 0 current again,
+    // and a take wrongly left current by the older code is settled by its own piece (sync_ms / to_ms) when the panel reads.
+    await analyseMusicVideo(ws, id, file);
+    expect(readPictures(pics).pictures[file].takes.filter((t) => t.mvShot !== undefined).every((t) => t.mvStale)).toBe(true);
+    update(pics, file, (p) => {
+      for (const t of p.takes) delete t.mvStale;
+    });
+    await withMusicVideos(ws, id, await picturesView(ws, id));
+    expect(readPictures(pics).pictures[file].takes.filter((t) => t.mvShot !== undefined).every((t) => t.mvStale)).toBe(true);
     // The panel still shows them (no crash, no shot index out of range).
     const view = (await withMusicVideos(ws, id, await picturesView(ws, id))).pictures.find((p) => p.file === file)!.mv!;
     expect(view.shots).toHaveLength(1);

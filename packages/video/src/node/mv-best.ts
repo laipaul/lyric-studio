@@ -9,7 +9,7 @@ import type { Workspace } from "@lyric/db";
 import { linesOfShot, mvResolution } from "../music-video";
 import { faceBadWhileSung, pickBestShots, scoreCandidate, type BestCandidate, type BestLine, type BestRow, type ScoredCandidate } from "../mv-best";
 import { readPictures, setTake, songFolder, type Take } from "./animate";
-import { clearOverlapping, cutShotTake, mvRefPicture } from "./music-video";
+import { clearOverlapping, cutShotTake, mvRefPicture, settleStaleTakes } from "./music-video";
 import { readRecipe } from "./recipe";
 import { placeSingingTake, singerContext, singingTakeInUse } from "./singer";
 import { songPathsById } from "./song-folder";
@@ -27,6 +27,7 @@ type Gathered = { lines: BestLine[]; candidates: BestCandidate[]; locked: Map<nu
 
 async function gather(ws: Workspace, projectId: string): Promise<Gathered | null> {
   const { dir } = songFolder(ws, projectId);
+  settleStaleTakes(dir);
   const all = readPictures(dir).pictures;
   const videos = Object.entries(all).filter(([, r]) => r.mv?.matched && r.mv.shots.length);
   if (!videos.length) return null;
